@@ -9,6 +9,14 @@ const componentCommonProps = {
     onTouchEnd: 'bindtouchend',
     onTouchMove: 'bindtouchmove',
     onTouchCancel: 'bindtouchcancel',
+  },
+  bytedance: {
+    onClick: 'bindtap',
+    onLongPress: 'bindlongpress',
+    onTouchStart: 'bindtouchstart',
+    onTouchEnd: 'bindtouchend',
+    onTouchMove: 'bindtouchmove',
+    onTouchCancel: 'bindtouchcancel',
   }
 };
 
@@ -52,6 +60,31 @@ const parserAdapters = {
 
     view: {
       ...componentCommonProps.wechat,
+      className: '__rax-view'
+    },
+    compatibleText: false,
+    text: {
+      ...componentCommonProps.ali,
+      className: '__rax-text'
+    },
+    styleKeyword: true,
+    needTransformEvent: true,
+    slotScope: false,
+    needTransformKey: true,
+    triggerRef: true
+  },
+  'bytedance': {
+    platform: 'bytedance',
+    if: 'wx:if',
+    else: 'wx:else',
+    elseif: 'wx:elif',
+    for: 'wx:for',
+    forItem: 'wx:for-item',
+    forIndex: 'wx:for-index',
+    key: 'wx:key',
+
+    view: {
+      ...componentCommonProps.bytedance,
       className: '__rax-view'
     },
     compatibleText: false,
