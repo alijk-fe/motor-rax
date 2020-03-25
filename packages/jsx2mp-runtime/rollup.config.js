@@ -8,7 +8,7 @@ function getPropsIdentifierName(platform) {
   switch (platform) {
     case 'wechat':
     case 'baidu':
-    case 'toutiao':
+    case 'bytedance':
       return 'properties';
 
     case 'ali':
