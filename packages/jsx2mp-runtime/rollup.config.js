@@ -69,4 +69,5 @@ function getRollupConfig(platform) {
 export default [
   getRollupConfig('ali'),
   getRollupConfig('wechat'),
+  getRollupConfig('bytedance'),
 ];
