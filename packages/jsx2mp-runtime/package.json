@@ -1,6 +1,6 @@
 {
-  "name": "tt-jsx2mp-runtime",
-  "version": "1.0.0",
+  "name": "@ali/tt-jsx2mp-runtime",
+  "version": "1.0.1",
   "description": "Runtime for jsx2mp.",
   "miniprogram": {
     "ali": "dist/jsx2mp-runtime.ali.esm.js",
