@@ -1,7 +1,7 @@
 /* eslint-disable import/no-extraneous-dependencies */
 /* global my, wx */
 import { getMiniAppHistory } from './history';
-import { isMiniApp, isWeChatMiniProgram } from 'universal-env';
+import { isMiniApp, isWeChatMiniProgram, isByteDanceMicroApp } from 'universal-env';
 
 let apiCore;
 
@@ -9,6 +9,8 @@ if (isMiniApp) {
   apiCore = my;
 } else if (isWeChatMiniProgram) {
   apiCore = wx;
+} else if (isByteDanceMicroApp) {
+  apiCore = tt;
 }
 
 function redirectTo(options) {
