@@ -75,13 +75,13 @@ const parserAdapters = {
   },
   'bytedance': {
     platform: 'bytedance',
-    if: 'wx:if',
-    else: 'wx:else',
-    elseif: 'wx:elif',
-    for: 'wx:for',
-    forItem: 'wx:for-item',
-    forIndex: 'wx:for-index',
-    key: 'wx:key',
+    if: 'tt:if',
+    else: 'tt:else',
+    elseif: 'tt:elif',
+    for: 'tt:for',
+    forItem: 'tt:for-item',
+    forIndex: 'tt:for-index',
+    key: 'tt:key',
 
     view: {
       ...componentCommonProps.bytedance,
