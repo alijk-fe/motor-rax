@@ -7,5 +7,9 @@ module.exports = [
   'rax-icon',
   'rax-link',
   'rax-video',
-  'rax-image'
+  'rax-image',
+  'rax-modal',
+  'rax-scrollview',
+  'rax-countdown',
+  'rax-recyclerview'
 ];
