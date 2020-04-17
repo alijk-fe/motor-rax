@@ -140,7 +140,8 @@ function createProxyMethods(events) {
           if (isQuickApp) {
             // shallow copy event & event._target
             event = {...event};
-            event._target = {...event._target};
+            // target differs between real machine & IDE
+            event._target = event._currentTarget ? {...event._currentTarget} : {...event._target};
             // align the currentTarget variable for quickapp
             event.currentTarget = event._target;
             event.currentTarget.dataset = event._target._dataset;
