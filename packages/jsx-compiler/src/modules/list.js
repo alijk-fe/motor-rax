@@ -21,8 +21,8 @@ const getParentListPath = require('../utils/getParentListPath');
  * @param {object} adapter
  */
 function transformMapMethod(path, parsed, code, adapter) {
-  const dynamicStyle = new DynamicBinding('_s');
-  const dynamicValue = new DynamicBinding('_d');
+  const dynamicStyle = new DynamicBinding(adapter.singleFileComponent ? 's' : '_s');
+  const dynamicValue = new DynamicBinding(adapter.singleFileComponent ? 'd' : '_d');
   const renderItemFunctions = parsed.renderItemFunctions;
 
   // Avoid transfrom x-for result
@@ -206,6 +206,11 @@ function transformMapMethod(path, parsed, code, adapter) {
         listBlock.__jsxlist = jsxList;
 
         parentPath.replaceWith(listBlock);
+        parentPath._forParams = {
+          forItem: forItem.name,
+          forIndex: renamedIndex.name,
+          forList: callee.object
+        };
         returnElPath.replaceWith(t.objectExpression(properties));
       } else if (t.isIdentifier(mapCallbackFn) || t.isMemberExpression(mapCallbackFn)) {
         // { foo.map(this.xxx) }

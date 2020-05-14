@@ -9,10 +9,10 @@ const isNativeComponent = require('../utils/isNativeComponent');
 
 function transformAttribute(ast, code, adapter) {
   const refs = [];
-  const dynamicRef = new DynamicBinding('_r');
+  const dynamicRef = new DynamicBinding(adapter.singleFileComponent ? 'r' : '_r');
   traverse(ast, {
     JSXAttribute(path) {
-      const { node } = path;
+      const { node, parentPath } = path;
       const attrName = node.name.name;
       switch (attrName) {
         case 'key':
@@ -37,8 +37,10 @@ function transformAttribute(ast, code, adapter) {
               path.parentPath.node.attributes.push(t.jsxAttribute(t.jsxIdentifier('class'),
                 Object.assign({}, node.value)));
             }
-          } else if (isNativeComponent(path, adapter.platform)) {
-            node.name.name = 'class';
+          } else {
+            if (isNativeComponent(path, adapter.platform) || adapter.singleFileComponent) {
+              node.name.name = 'class';
+            }
           }
           break;
         case 'id':
@@ -52,12 +54,20 @@ function transformAttribute(ast, code, adapter) {
           break;
         case 'style':
           if (adapter.styleKeyword && !isNativeComponent(path, adapter.platform)) {
-            node.name.name = 'styleSheet';
+            if (adapter.singleFileComponent && parentPath.node.isCustomEl) {
+              node.name.name = 'style-sheet';
+            } else {
+              node.name.name = 'styleSheet';
+            }
           }
           break;
         case 'ref':
-          if (path.node.__transformed) return;
           if (t.isJSXExpressionContainer(node.value) && !t.isStringLiteral(node.value.expression)) {
+            if (adapter.singleFileComponent) {
+              // node.value = t.stringLiteral(genExpression(node.value.expression));
+              node.name.name = 'id';
+              // break;
+            }
             const childExpression = node.value.expression;
             // For this.xxx = createRef();
             if (t.isMemberExpression(childExpression)
@@ -70,7 +80,7 @@ function transformAttribute(ast, code, adapter) {
             }
             refs.push(handleRefAttr(path, childExpression, node.value, adapter));
           } else {
-            throw new CodeError(code, node, node.loc, "Ref's type must be JSXExpressionContainer, like <View ref={ viewRef }/>");
+            throw new CodeError(code, node, path.loc, "Ref's type must be JSXExpressionContainer, like <View ref = { scrollRef }/>");
           }
           break;
         default:
@@ -91,7 +101,6 @@ module.exports = {
     // Set global dynamic ref value
     parsed.dynamicRef = dynamicRef;
   },
-
   // For test cases.
-  _transformAttribute: transformAttribute,
+  _transformAttribute: transformAttribute
 };

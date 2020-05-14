@@ -1,8 +1,9 @@
 const t = require('@babel/types');
-const { _transformAttribute } = require('../attribute');
+const { _transformAttribute, _transformPreComponentAttr } = require('../attribute');
 const { parseExpression } = require('../../parser');
 const adapter = require('../../adapter').ali;
 const wxAdapter = require('../../adapter').wechat;
+const quickAppAdapter = require('../../adapter').quickapp;
 const genCode = require('../../codegen/genCode');
 
 describe('Transform JSX Attribute', () => {
@@ -53,6 +54,21 @@ describe('Transform JSX Attribute', () => {
     expect(genCode(ast).code).toEqual(`<Custom styleSheet={{
   width: '100rpx'
 }}>test</Custom>`);
+  });
+  it("should collect attribute name is ref and parse it's value as a string in quickApp", () => {
+    const code = '<View ref={scrollViewRef}>test</View>';
+    const ast = parseExpression(code);
+    const { refs } = _transformAttribute(ast, code, quickAppAdapter);
+    expect(genCode(ast).code).toEqual('<View id="scrollViewRef">test</View>');
+    expect(refs[0].name.value).toEqual('scrollViewRef');
+  });
+  it('should transform quickApp custom component style into styleSheet', () => {
+    const code = "<rax-link style={{width: '100rpx'}}>test</rax-link>";
+    const ast = parseExpression(code);
+    _transformAttribute(ast, code, quickAppAdapter);
+    expect(genCode(ast).code).toEqual(`<rax-link styleSheet={{
+  width: '100rpx'
+}}>test</rax-link>`);
   });
   it('should transform wechat custom component id', () => {
     const code = '<Custom id="box">test</Custom>';

@@ -1,8 +1,9 @@
-const { _transformComponents } = require('../components');
+const { _transformComponents, _transformDataset } = require('../components');
 const { parseExpression, parseCode, getImported } = require('../../parser/index');
 const genCode = require('../../codegen/genCode');
 const adapter = require('../../adapter').ali;
 const wxAdapter = require('../../adapter').wechat;
+const quickAppAdapter = require('../../adapter').quickapp;
 
 describe('Transform components', () => {
   it('should transform Provider', () => {
@@ -73,7 +74,7 @@ describe('Transform components', () => {
       templateAST: ast
     };
     const options = {
-      adapter
+      adapter: quickAppAdapter
     };
     _transformComponents(parsed, options);
     expect(genCode(ast).code).toEqual('<View><block>Test</block></View>');

@@ -13,8 +13,8 @@ const isSlotScopeNode = require('../utils/isSlotScopeNode');
  *          var _style0 = { width: 100 };
  *          return { _style0 };
  */
-function transformStyle(ast) {
-  const dynamicStyle = new DynamicBinding('_s');
+function transformStyle(ast, adapter) {
+  const dynamicStyle = new DynamicBinding(adapter.singleFileComponent ? 's' : '_s');
   let useCreateStyle = false;
   traverse(ast, {
     JSXAttribute(path) {
@@ -48,7 +48,7 @@ function shouldReplace(path) {
 
 module.exports = {
   parse(parsed, code, options) {
-    const { useCreateStyle, dynamicStyle } = transformStyle(parsed[TEMPLATE_AST]);
+    const { useCreateStyle, dynamicStyle } = transformStyle(parsed[TEMPLATE_AST], options.adapter);
     if (!parsed.useCreateStyle) {
       parsed.useCreateStyle = useCreateStyle;
     }

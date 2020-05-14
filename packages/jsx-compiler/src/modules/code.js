@@ -5,6 +5,8 @@ const { parseExpression } = require('../parser');
 const isClassComponent = require('../utils/isClassComponent');
 const isFunctionComponent = require('../utils/isFunctionComponent');
 const traverse = require('../utils/traverseNodePath');
+const { readJSONSync } = require('fs-extra');
+const genExpression = require('../codegen/genExpression');
 const { isNpmModule, isWeexModule } = require('../utils/checkModule');
 const { getNpmName, normalizeFileName, addRelativePathPrefix, normalizeOutputFilePath } = require('../utils/pathHelper');
 const { BINDING_REG } = require('../utils/checkAttr');
@@ -71,7 +73,7 @@ module.exports = {
     const { ast, programPath, defaultExportedPath, exportComponentPath, renderFunctionPath,
       useCreateStyle, useClassnames, dynamicValue, dynamicRef, dynamicStyle, dynamicEvents, imported,
       contextList, refs, componentDependentProps, renderItemFunctions, eventHandler, eventHandlers = [] } = parsed;
-    const { platform, type, cwd, outputPath, sourcePath, resourcePath, disableCopyNpm } = options;
+    const { platform, type, cwd, outputPath, sourcePath, resourcePath, disableCopyNpm, adapter } = options;
     if (type !== 'app' && (!defaultExportedPath || !defaultExportedPath.node)) {
       // Can not found default export, otherwise app.js is excluded.
       return;
@@ -80,6 +82,9 @@ module.exports = {
 
     if (type === 'app') {
       userDefineType = 'function';
+      if (adapter.singleFileComponent) {
+        addExportDefault(ast);
+      }
     } else {
       const replacer = getReplacer(exportComponentPath);
       let { id, body } = exportComponentPath.node;
@@ -120,7 +125,10 @@ module.exports = {
     ensureIndexPathInImports(ast, resourcePath); // In WeChat miniapp, `require` can't get index file if index is omitted
     renameCoreModule(ast, runtimePath);
     renameFileModule(ast);
+    // const inputEl = useRef(null) => const inputEl = useRef(null, 'inputEl');
+    renameUseRef(parsed.ast);
     renameAppConfig(ast, sourcePath, resourcePath);
+
 
     if (!disableCopyNpm) {
       const currentNodeModulePath = join(sourcePath, 'npm');
@@ -128,11 +136,17 @@ module.exports = {
       renameNpmModules(ast, npmRelativePath, resourcePath, cwd);
     }
 
+
     if (type !== 'app') {
-      addDefine(programPath, type, userDefineType, eventHandlers, useCreateStyle, useClassnames, exportedVariables, runtimePath);
+      if (adapter.singleFileComponent) {
+        removeDefaultImports(ast);
+      }
+      addDefine(programPath, type, userDefineType, eventHandlers, useCreateStyle, useClassnames, exportedVariables, runtimePath, adapter);
     }
 
-    removeDefaultImports(ast);
+    if (!adapter.singleFileComponent) {
+      removeDefaultImports(ast);
+    }
 
     /**
      * updateChildProps: collect props dependencies.
@@ -184,10 +198,25 @@ module.exports = {
       addUpdateData(dynamicValue, dynamicRef, dynamicStyle, renderItemFunctions, renderFunctionPath);
       addUpdateEvent(dynamicEvents, eventHandler, renderFunctionPath);
       addProviderIniter(contextList, renderFunctionPath);
-      addRegisterRefs(refs, renderFunctionPath);
+      addRegisterRefs(refs, renderFunctionPath, adapter);
     }
   },
 };
+
+function addExportDefault(ast) {
+  traverse(ast, {
+    ExpressionStatement(path) {
+      const { expression } = path.node;
+      const { callee } = expression;
+      if (t.isCallExpression(expression) && t.isIdentifier(callee) && callee.name === 'runApp') {
+        path.replaceWith(
+          t.exportDefaultDeclaration(
+            expression
+          ));
+      }
+    }
+  });
+}
 
 function genTagIdExp(expressions) {
   let ret = '';
@@ -251,6 +280,18 @@ function renameFileModule(ast) {
   });
 }
 
+function renameUseRef(ast) {
+  traverse(ast, {
+    CallExpression(path) {
+      const { node, parentPath } = path;
+      const { callee } = node;
+      if (t.isVariableDeclarator(parentPath) && t.isIdentifier(callee) && callee.name === 'useRef') {
+        node.arguments.push(t.stringLiteral(parentPath.node.id.name));
+      }
+    }
+  });
+}
+
 /**
  * Rename app.json to app.config.js, for prev is compiled to adapte miniapp.
  * eg:
@@ -266,7 +307,7 @@ function renameAppConfig(ast, sourcePath, resourcePath) {
       if (source.isStringLiteral()) {
         const appConfigSourcePath = join(resourcePath, '..', source.node.value);
         if (appConfigSourcePath === join(sourcePath, 'app.json')) {
-          const replacement = source.node.value.replace(/app\.json/, 'app.config.js');
+          const replacement = source.node.value.replace(/app\.json/, 'appConfig.js');
           source.replaceWith(t.stringLiteral(replacement));
         }
       }
@@ -291,7 +332,7 @@ function renameNpmModules(ast, npmRelativePath, filename, cwd) {
     const npmName = getNpmName(value);
     const nodeModulePath = join(rootContext, 'node_modules');
     const searchPaths = [nodeModulePath];
-    const target = require.resolve(npmName, { paths: searchPaths });
+    let target = require.resolve(npmName, { paths: searchPaths });
     // In tnpm, target will be like following (symbol linked path):
     // ***/_universal-toast_1.0.0_universal-toast/lib/index.js
     let packageJSONPath;
@@ -301,7 +342,13 @@ function renameNpmModules(ast, npmRelativePath, filename, cwd) {
       throw new Error(`You may not have npm installed: "${npmName}"`);
     }
 
+    const packageJSON = readJSONSync(packageJSONPath);
+
     const moduleBasePath = join(packageJSONPath, '..');
+    // TODO remove quickappConfig
+    if (packageJSON.quickappConfig) {
+      target = join(moduleBasePath, packageJSON.quickappConfig.main);
+    }
     const realNpmName = relative(nodeModulePath, moduleBasePath);
     const modulePathSuffix = relative(moduleBasePath, target);
 
@@ -329,7 +376,7 @@ function renameNpmModules(ast, npmRelativePath, filename, cwd) {
   });
 }
 
-function addDefine(programPath, type, userDefineType, eventHandlers, useCreateStyle, useClassnames, exportedVariables, runtimePath) {
+function addDefine(programPath, type, userDefineType, eventHandlers, useCreateStyle, useClassnames, exportedVariables, runtimePath, adapter) {
   let safeCreateInstanceId;
   let importedIdentifier;
   switch (type) {
@@ -390,19 +437,30 @@ function addDefine(programPath, type, userDefineType, eventHandlers, useCreateSt
     );
   }
 
-  programPath.node.body.push(
-    t.expressionStatement(
-      t.callExpression(
-        t.identifier(getConstructor(type)),
-        [
-          t.callExpression(
-            t.identifier(safeCreateInstanceId),
-            args
-          )
-        ],
+  if (adapter.singleFileComponent) {
+    programPath.node.body.push(
+      t.exportDefaultDeclaration(
+        t.callExpression(
+          t.identifier(safeCreateInstanceId),
+          args
+        )
       )
-    )
-  );
+    );
+  } else {
+    programPath.node.body.push(
+      t.expressionStatement(
+        t.callExpression(
+          t.identifier(getConstructor(type)),
+          [
+            t.callExpression(
+              t.identifier(safeCreateInstanceId),
+              args
+            )
+          ],
+        )
+      )
+    );
+  }
 }
 
 function removeRaxImports(ast) {
@@ -525,7 +583,7 @@ function addProviderIniter(contextList, renderFunctionPath) {
  * @param {Array} refs
  * @param {Object} renderFunctionPath
  * */
-function addRegisterRefs(refs, renderFunctionPath) {
+function addRegisterRefs(refs, renderFunctionPath, adapter) {
   const registerRefsMethods = t.memberExpression(
     t.thisExpression(),
     t.identifier('_registerRefs')

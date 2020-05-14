@@ -173,8 +173,8 @@ function transformDirectiveList(parsed, code, adapter) {
         if (!t.isJSXExpressionContainer(node.value)) {
           throw new CodeError(code, node, node.loc, 'Invalid x-for usage');
         }
-        const dynamicStyle = new DynamicBinding('_s');
-        const dynamicValue = new DynamicBinding('_d');
+        const dynamicStyle = new DynamicBinding(adapter.singleFileComponent ? 's' : '_s');
+        const dynamicValue = new DynamicBinding(adapter.singleFileComponent ? 'd' : '_d');
         const { expression } = node.value;
         let params = [];
         let forNode;
@@ -236,6 +236,11 @@ function transformDirectiveList(parsed, code, adapter) {
           jsxplus: true
         };
         transformListJSXElement(parsed, parentJSXEl, dynamicStyle, dynamicValue, code, adapter);
+        parentJSXEl._forParams = {
+          forItem: params[0].name,
+          forIndex: params[1].name,
+          forList: expression.right.name
+        };
         path.remove();
       }
     }
