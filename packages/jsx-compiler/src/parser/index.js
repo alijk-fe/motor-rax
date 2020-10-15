@@ -4,10 +4,11 @@ const invokeModules = require('../utils/invokeModules');
 const traverse = require('../utils/traverseNodePath');
 const getDefaultExportedPath = require('../utils/getDefaultExportedPath');
 const getProgramPath = require('../utils/getProgramPath');
+const getAliasCorrespondingValue = require('../utils/getAliasCorrespondingValue');
 const parserOption = require('./option');
 const md5 = require('md5');
 
-const RELATIVE_COMPONENTS_REG = /^\..*(\.jsx?)?$/i;
+const { RELATIVE_COMPONENTS_REG, MINIAPP_PLUGIN_COMPONENTS_REG } = require('../constants');
 
 function getTagName(str) {
   return 'c-' + md5(str).slice(0, 6);
@@ -25,14 +26,18 @@ function parseCode(code) {
  * Get imported modules.
  * @param ast
  */
-function getImported(ast) {
+function getImported(ast, aliasEntries, resourcePath) {
   // { [source]: [{ local: String, imported: String, default: Boolean } }]
   const imported = {};
   traverse(ast, {
     ImportDeclaration(path) {
       const { specifiers } = path.node;
       if (!Array.isArray(specifiers)) return;
+      // Handle alias
+      const aliasCorrespondingValue = getAliasCorrespondingValue(aliasEntries, path.node.source.value, resourcePath);
+      if (aliasCorrespondingValue) path.node.source = t.stringLiteral(aliasCorrespondingValue);
       const source = path.node.source.value;
+
       imported[source] = [];
 
       path.node.specifiers.forEach((specifier) => {
@@ -42,7 +47,7 @@ function getImported(ast) {
           ret.importFrom = specifier.imported.name;
         }
 
-        if (RELATIVE_COMPONENTS_REG.test(source)) {
+        if (RELATIVE_COMPONENTS_REG.test(source) || MINIAPP_PLUGIN_COMPONENTS_REG.test(source)) {
           // alias = 'c-xxxxx'
           ret.name = getTagName(source);
           ret.isCustomEl = true;
@@ -110,7 +115,7 @@ function parse(code, options) {
   }
 
   const ast = parseCode(code);
-  const imported = getImported(ast);
+  const imported = getImported(ast, options.aliasEntries, options.resourcePath);
   const exported = getExported(ast);
   const programPath = getProgramPath(ast);
   const defaultExportedPath = getDefaultExportedPath(ast);

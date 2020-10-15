@@ -1,61 +1,47 @@
 import Element from '../element';
-import cache from '../../util/cache';
-import Pool from '../../util/pool';
-
-const pool = new Pool();
+import cache from '../../utils/cache';
+import tool from '../../utils/tool';
 
 class CustomComponent extends Element {
-  // Create instance
-  static $$create(options, tree) {
-    const config = cache.getConfig();
-
-    if (config.optimization.elementMultiplexing) {
-      // 复用 element 节点
-      const instance = pool.get();
-
-      if (instance) {
-        instance.$$init(options, tree);
-        return instance;
-      }
-    }
-
-    return new CustomComponent(options, tree);
+  constructor(options) {
+    super(options);
+    this.__nativeType = options.nativeType;
   }
 
-  /**
-     * 覆写父类的 $$init 方法
-     */
-  $$init(options, tree) {
-    this.$_behavior = options.componentName;
-
-    super.$$init(options, tree);
-  }
-
-  /**
-     * 覆写父类的 $$destroy 方法
-     */
   $$destroy() {
     super.$$destroy();
 
-    this.$_behavior = null;
+    this.__nativeType = null;
   }
 
-  /**
-     * 覆写父类的回收实例方法
-     */
-  $$recycle() {
-    this.$$destroy();
+  get _renderInfo() {
+    const renderInfo = {
+      nodeId: this.__nodeId,
+      pageId: this.__pageId,
+      nodeType: this.__tagName,
+      style: this.style.cssText,
+      className: this.className,
+      ...this.__attrs.__value
+    };
 
     const config = cache.getConfig();
-
-    if (config.optimization.elementMultiplexing) {
-      // 复用 element 节点
-      pool.add(this);
+    let nativeInfo = null;
+    if (this.__nativeType === 'customComponent') {
+      nativeInfo = config.usingComponents[this.__tagName];
+    } else if (this.__nativeType === 'miniappPlugin') {
+      nativeInfo = config.usingPlugins[this.__tagName];
     }
-  }
-
-  get behavior() {
-    return this.$_behavior;
+    if (nativeInfo) {
+      // Bind methods to every element which is used recursively to generate dom tree
+      nativeInfo.events.forEach(event => {
+        const eventName = `${this.__tagName}_${event}_${tool.getId()}`;
+        renderInfo[event] = eventName;
+        cache.setElementMethods(eventName, (...args) => {
+          this.$$trigger(event, { args });
+        });
+      });
+    }
+    return renderInfo;
   }
 }
 

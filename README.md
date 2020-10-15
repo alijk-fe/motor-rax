@@ -17,7 +17,7 @@ Rax is a progressive React framework for building universal application.
 
 ---
 
-💌 **Write Once, Run Anywhere:** write one codebase, run with `Web`, [`Weex`](https://weex.apache.org/), [`Node.js`](https://nodejs.org/), `Alibaba MiniApp`, `WeChat MiniProgram` and could work with more container that implements [driver specification](./docs/en-US/driver-spec.md).
+💌 **Write Once, Run Anywhere:** write one codebase, run with `Web`, [`Weex`](https://weex.apache.org/), [`Node.js`](https://nodejs.org/), `Alibaba MiniApp`, `WeChat MiniProgram` and could work with more container that implements [driver specification](https://github.com/alibaba/rax/wiki/Driver-Specification).
 
 ⏱ **Fast:** use better performance and tinier size(📦~6KB) alternative to [React](http://reactjs.org/) with the same API.
 
@@ -44,9 +44,9 @@ $ npm run start
 
 #### Start from [VS Code](https://code.visualstudio.com/)
 
-You need to install the [Rax extension](https://marketplace.visualstudio.com/items?itemName=Rax.vscode-rax) and invoke the `rax` command from the VS Code command palette (`Ctrl + Shift + P` or `Cmd + Shift + P` on Mac):
+You need to install the [Iceworks extension](https://marketplace.visualstudio.com/items?itemName=iceworks-team.iceworks) and invoke the `Iceworks: Create Application` command from the VS Code command palette (`Ctrl + Shift + P` or `Cmd + Shift + P` on Mac):
 
-![vscode](https://user-images.githubusercontent.com/677114/72176350-2488e700-3419-11ea-9f51-b640c51256db.gif)
+![vscode](https://user-images.githubusercontent.com/56879942/88181928-1e927f00-cc62-11ea-94fb-06d12dab77d1.gif)
 
 ### Developer Tools 🛠
 
@@ -57,9 +57,9 @@ and extension not works in `producation` mode.
 1. Install the Chrome [Rax Developer Tools](https://chrome.google.com/webstore/detail/rax-developer-tools/anpeoinhjjligmgoiepbnigjhmijblff) extension
 2. Reload and go to the 'Rax' tab in the browser's development tools
 
-#### VS Code Extensions
+#### VS Code Extension
 
-You can use [Rax VS Code Extensions](https://github.com/raxjs/rax-vscode-extensions) to get better development experience.
+You can use [Iceworks VS Code Extension](https://marketplace.visualstudio.com/items?itemName=iceworks-team.iceworks) to get better development experience.
 
 ### Awesome Things 📝
 

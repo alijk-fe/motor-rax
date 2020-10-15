@@ -15,7 +15,7 @@ test('document: nodeType', () => {
 });
 
 test('document: documentElement', () => {
-  expect(document.documentElement.tagName).toBe('HTML');
+  expect(document.documentElement.tagName).toBe('BODY'); // Hack in miniapp, not be consistent with W3C
   expect(document.documentElement.parentNode).toBe(document);
 });
 
@@ -25,10 +25,6 @@ test('document: body', () => {
 
 test('document: nodeName', () => {
   expect(document.nodeName).toBe('#document');
-});
-
-test('document: head', () => {
-  expect(document.head.tagName).toBe('HEAD');
 });
 
 test('document: defaultView', () => {
@@ -67,22 +63,19 @@ test('document: querySelector', () => {
   const node1 = document.querySelector('#bb');
   expect(node1.tagName).toBe('DIV');
   expect(node1.id).toBe('bb');
-
-  const node2 = document.querySelector('#bb .bb4');
+  const node2 = document.querySelector('.bb4');
   expect(node2.tagName).toBe('SPAN');
   expect(node2.id).toBe('bb4');
-
   expect(document.querySelector('#aa')).toBe(null);
 });
 
 test('document: querySelectorAll', () => {
-  const nodes = document.querySelectorAll('#bb .bb4');
+  const nodes = document.querySelectorAll('.bb4');
   expect(nodes.length).toBe(3);
   expect(nodes[0].tagName).toBe('SPAN');
   expect(nodes[0].id).toBe('bb4');
   expect(nodes[1].tagName).toBe('SPAN');
   expect(nodes[2].tagName).toBe('SPAN');
-
   expect(document.querySelectorAll('#aa').length).toBe(0);
 });
 
@@ -126,33 +119,8 @@ test('document: createComment', () => {
 });
 
 test('document: createDocumentFragment', () => {
-  const parent = document.createElement('div');
-  const node1 = document.createElement('div');
-  const node2 = document.createElement('span');
-  const node3 = document.createElement('div');
-  const node4 = document.createElement('span');
-
-  expect(parent.children).toEqual([]);
-
   const fragment1 = document.createDocumentFragment();
-  fragment1.appendChild(node1);
-  fragment1.appendChild(node2);
-  fragment1.appendChild(node3);
-  parent.appendChild(fragment1);
   expect(fragment1.nodeType).toEqual(Node.DOCUMENT_FRAGMENT_NODE);
-  expect(parent.children).toEqual([node1, node2, node3]);
-
-  const fragment2 = document.createDocumentFragment();
-  fragment2.appendChild(node3);
-  fragment2.appendChild(node4);
-  parent.replaceChild(fragment2, node2);
-  expect(parent.children).toEqual([node1, node3, node4]);
-
-  const fragment3 = document.createDocumentFragment();
-  fragment3.appendChild(node2);
-  fragment3.appendChild(node4);
-  parent.insertBefore(fragment3, node3);
-  expect(parent.children).toEqual([node1, node2, node4, node3]);
 });
 
 test('document: createEvent', () => {

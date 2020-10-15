@@ -1,30 +1,11 @@
-import Pool from '../util/pool';
-import cache from '../util/cache';
-import tool from '../util/tool';
+import tool from '../utils/tool';
 import Node from '../node/node';
 
-const pool = new Pool();
-
 class TextNode extends Node {
-  static $$create(options, tree) {
-    const config = cache.getConfig();
-
-    if (config.optimization.textMultiplexing) {
-      const instance = pool.get();
-
-      if (instance) {
-        instance.$$init(options, tree);
-        return instance;
-      }
-    }
-
-    return new TextNode(options, tree);
-  }
-
-  $$init(options, tree) {
+  constructor(options) {
     options.type = 'text';
 
-    super.$$init(options, tree);
+    super(options);
 
     this.$_content = options.content || '';
   }
@@ -35,25 +16,13 @@ class TextNode extends Node {
     this.$_content = '';
   }
 
-  $$recycle() {
-    this.$$destroy();
-
-    const config = cache.getConfig();
-
-    if (config.optimization.textMultiplexing) {
-      pool.add(this);
-    }
+  _triggerUpdate(payload) {
+    this._root.enqueueRender(payload);
   }
 
-  $_triggerParentUpdate() {
-    if (this.parentNode) this.parentNode.$$trigger('$$childNodesUpdate');
-  }
-
-  get $$domInfo() {
+  get _renderInfo() {
     return {
-      nodeId: this.$_nodeId,
-      pageId: this.$_pageId,
-      type: this.$_type,
+      nodeType: `h-${this.$_type}`,
       content: this.$_content,
     };
   }
@@ -82,7 +51,13 @@ class TextNode extends Node {
     value += '';
 
     this.$_content = value;
-    this.$_triggerParentUpdate();
+    if (this._isRendered()) {
+      const payload = {
+        path: `${this._path}.content`,
+        value
+      };
+      this._triggerUpdate(payload);
+    }
   }
 
   get data() {
@@ -94,10 +69,7 @@ class TextNode extends Node {
   }
 
   cloneNode() {
-    return this.ownerDocument.$$createTextNode({
-      content: this.$_content,
-      nodeId: `b-${tool.getId()}`,
-    });
+    return this.ownerDocument.createTextNode(this.$_content);
   }
 }
 

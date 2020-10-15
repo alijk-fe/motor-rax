@@ -1,9 +1,9 @@
 // eslint-disable-next-line import/no-extraneous-dependencies
-import { isQuickApp } from 'universal-env';
+import { isQuickApp, isByteDanceMicroApp, isWeChatMiniProgram } from 'universal-env';
 import Host from './host';
 import { scheduleEffect, invokeEffects } from './scheduler';
 import { is } from './shallowEqual';
-import { isFunction, isNull } from './types';
+import { isFunction, isNull, isUndef } from './types';
 import { COMPONENT_DID_MOUNT, COMPONENT_DID_UPDATE, COMPONENT_WILL_UNMOUNT } from './cycles';
 import { enqueueRender } from './enqueueRender';
 import createRef from './createRef';
@@ -35,6 +35,20 @@ function areInputsEqual(inputs, prevInputs) {
   return true;
 }
 
+function setWrapperRef(instance, ref, create) {
+  if (isWeChatMiniProgram || isByteDanceMicroApp) {
+    if (ref) {
+      instance._internal.triggerEvent('ComRef', create());
+    }
+    return () => instance._internal.triggerEvent('ComRef', null);
+  } else if (!isNull(ref)) {
+    ref.current = create();
+    return () => {
+      ref.current = null;
+    };
+  }
+}
+
 export function useState(initialState) {
   const currentInstance = getCurrentRenderingInstance();
   const hookID = currentInstance.getHookID();
@@ -64,6 +78,8 @@ export function useState(initialState) {
         // Current instance is in render update phase.
         // After this one render finish, will continue run.
         hook[2] = newState;
+        // Mark need update
+        currentInstance.__shouldUpdate = true;
         enqueueRender(currentInstance);
       }
     };
@@ -149,18 +165,19 @@ function useEffectImpl(effect, inputs, defered) {
 }
 
 export function useImperativeHandle(ref, create, inputs) {
-  const nextInputs = !isNull(inputs) ? inputs.concat([ref]) : null;
+  const nextInputs = !isNull(inputs) && !isUndef(inputs) ? inputs.concat([ref]) : null;
+  const currentInstance = getCurrentRenderingInstance();
+  const mounted = currentInstance.__mounted;
+  let willUnmountFn;
 
+  if (!currentInstance.mounted) {
+    willUnmountFn = setWrapperRef(currentInstance, ref, create);
+  }
   useLayoutEffect(() => {
-    if (isFunction(ref)) {
-      ref(create());
-      return () => ref(null);
-    } else if (!isNull(ref)) {
-      ref.current = create();
-      return () => {
-        ref.current = null;
-      };
+    if (mounted) {
+      willUnmountFn = setWrapperRef(currentInstance, ref, create);
     }
+    return willUnmountFn;
   }, nextInputs);
 }
 

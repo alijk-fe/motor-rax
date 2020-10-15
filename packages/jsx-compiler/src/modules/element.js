@@ -10,8 +10,10 @@ const baseComponents = require('../baseComponents');
 const replaceComponentTagName = require('../utils/replaceComponentTagName');
 const { parseExpression } = require('../parser/index');
 const isSlotScopeNode = require('../utils/isSlotScopeNode');
-const { isDirectiveAttr, isEventHandlerAttr, BINDING_REG } = require('../utils/checkAttr');
+const { isDirectiveAttr, isEventHandlerAttr, isRenderPropsAttr, BINDING_REG } = require('../utils/checkAttr');
 const handleValidIdentifier = require('../utils/handleValidIdentifier');
+const isNativeComponent = require('../utils/isNativeComponent');
+const { componentCommonProps } = require('../adapter');
 
 const ATTR = Symbol('attribute');
 const ELE = Symbol('element');
@@ -32,7 +34,7 @@ function transformTemplate(
     dynamicValue
   },
   adapter,
-  sourceCode,
+  sourceCode
 ) {
   const dynamicEvents = new DynamicBinding('_e');
   function handleJSXExpressionContainer(path) {
@@ -53,6 +55,7 @@ function transformTemplate(
     }
 
     const isEventHandler = isEventHandlerAttr(attributeName);
+    const isRenderProps = isRenderPropsAttr(attributeName);
 
     switch (expression.type) {
       // <div foo={'string'} /> -> <div foo="string" />
@@ -204,55 +207,58 @@ function transformTemplate(
             'Unsupported Function in JSXElement:',
           );
 
-        if (!isEventHandler)
+        if (!isEventHandler && !isRenderProps) {
           throw new CodeError(
             sourceCode,
             node,
             node.loc,
-            `Only EventHandlers are supported in Mini Program, eg: onClick/onChange, instead of "${attributeName}".`,
+            `Only EventHandlers (like onClick/onChange) and render props (which starts with 'render') are supported in Mini Program, instead of "${attributeName}".`,
           );
-        const params = (expression.params || []).map(param => {
-          // Compatibility (event = {}) => handleClick(event)
-          if (t.isAssignmentPattern(param)) {
-            return param.left;
-          }
-          return param;
-        });
-        const callExp = expression.body;
-        const args = callExp.arguments;
-        const { attributes } = parentPath.parentPath.node;
-        const fnExpression = t.isCallExpression(callExp) ? callExp.callee : expression;
-        const name = dynamicEvents.add({
-          expression: fnExpression,
-          isDirective,
-        });
-        const formatName = formatEventName(name);
-        if (Array.isArray(args)) {
-          const fnFirstParam = expression.params[0];
-          if (!(args.length === 1 && t.isIdentifier(args[0], {
-            name: fnFirstParam && fnFirstParam.name
-          }))) {
-            args.forEach((arg, index) => {
-              const transformedArg = transformCallExpressionArg(arg, params, dynamicValue, isDirective);
-              if (transformedArg.__dataset) {
-                attributes.push(
-                  t.jsxAttribute(
-                    t.jsxIdentifier(`data-${formatName}-arg-` + index),
-                    t.stringLiteral(
-                      createBinding(
-                        genExpression(transformedArg, {
-                          concise: true,
-                          comments: false,
-                        }),
+        }
+        if (isEventHandler) {
+          const params = (expression.params || []).map(param => {
+            // Compatibility (event = {}) => handleClick(event)
+            if (t.isAssignmentPattern(param)) {
+              return param.left;
+            }
+            return param;
+          });
+          const callExp = expression.body;
+          const args = callExp.arguments;
+          const { attributes } = parentPath.parentPath.node;
+          const fnExpression = t.isCallExpression(callExp) ? callExp.callee : expression;
+          const name = dynamicEvents.add({
+            expression: fnExpression,
+            isDirective,
+          });
+          const formatName = formatEventName(name);
+          if (Array.isArray(args)) {
+            const fnFirstParam = expression.params[0];
+            if (!(args.length === 1 && t.isIdentifier(args[0], {
+              name: fnFirstParam && fnFirstParam.name
+            }))) {
+              args.forEach((arg, index) => {
+                const transformedArg = transformCallExpressionArg(arg, params, dynamicValue, isDirective);
+                if (transformedArg.__dataset) {
+                  attributes.push(
+                    t.jsxAttribute(
+                      t.jsxIdentifier(`data-${formatName}-arg-` + index),
+                      t.stringLiteral(
+                        createBinding(
+                          genExpression(transformedArg, {
+                            concise: true,
+                            comments: false,
+                          }),
+                        ),
                       ),
                     ),
-                  ),
-                );
-              }
-            });
+                  );
+                }
+              });
+            }
           }
+          path.replaceWith(t.stringLiteral(name));
         }
-        path.replaceWith(t.stringLiteral(name));
         break;
 
       // <tag key={this.props.name} key2={a.b} /> => <tag key="{{_d0.name}}" key2="{{_d1.b}}" />
@@ -271,7 +277,10 @@ function transformTemplate(
             const replaceNode = transformMemberExpression(
               expression,
               dynamicValue,
-              isDirective,
+              {
+                isDirective,
+                needRegisterProps: adapter.needRegisterProps
+              },
             );
             replaceNode.__transformed = true;
             path.replaceWith(
@@ -282,7 +291,10 @@ function transformTemplate(
           const replaceNode = transformMemberExpression(
             expression,
             dynamicValue,
-            isDirective,
+            {
+              isDirective,
+              needRegisterProps: adapter.needRegisterProps
+            },
           );
           path.replaceWith(createJSXBinding(genExpression(replaceNode)));
         }
@@ -402,7 +414,10 @@ function transformTemplate(
               const replaceNode = transformMemberExpression(
                 innerPath.node,
                 dynamicValue,
-                isDirective,
+                {
+                  isDirective,
+                  needRegisterProps: adapter.needRegisterProps
+                },
               );
               replaceNode.__transformed = true;
               innerPath.replaceWith(replaceNode);
@@ -412,7 +427,10 @@ function transformTemplate(
               const replaceProperties = transformObjectExpression(
                 innerPath.node,
                 dynamicValue,
-                isDirective,
+                {
+                  isDirective,
+                  needRegisterProps: adapter.needRegisterProps
+                },
               );
               const replaceNode = t.objectExpression(replaceProperties);
               replaceNode.__transformed = true;
@@ -498,8 +516,22 @@ function transformTemplate(
               );
             }
           }
-          // Handle native components, like rax-text
-          if (baseComponents.indexOf(name) > -1 && adapter.needTransformEvent) {
+
+          // Handle native components
+          // In native components, events in componentCommonProps should be transformed
+          // Other Events should be changed if needTransformEvent
+          if (isNativeComponent(componentTagNode, adapter.platform)) {
+            node.attributes.forEach(attr => {
+              const attrName = attr.name.name;
+              if (componentCommonProps[adapter.platform][attrName]) {
+                attr.name.name = componentCommonProps[adapter.platform][attrName];
+              } else if (attr.value && attr.value.value && attr.value.value.indexOf('_e') > -1 && adapter.needTransformEvent) {
+                attr.name.name = attr.name.name.replace('on', 'bind').toLowerCase();
+              }
+            });
+          } else if (adapter.needTransformEvent && baseComponents.indexOf(name) > -1) {
+            // Rax base component should add bind before onXXX
+            // While events in custom component should not be changed
             node.attributes.forEach(attr => {
               if (attr.value && attr.value.value && attr.value.value.indexOf('_e') > -1) {
                 attr.name.name = `bind${attr.name.name}`;
@@ -560,16 +592,33 @@ function hasComplexExpression(path) {
 /**
  * Transform MemberExpression
  * */
-function transformMemberExpression(expression, dynamicBinding, isDirective) {
-  if (checkMemberHasThis(expression)) {
-    const name = dynamicBinding.add({
-      expression,
-      isDirective,
-    });
-    return t.identifier(name);
+function transformMemberExpression(expression, dynamicBinding, options, isRecursion) {
+  /**
+   * Example: a.b
+   * a is object, b is property
+   * when the expression is a['b']
+   */
+  const { object, property, computed } = expression;
+  const { isDirective, needRegisterProps } = options;
+
+  if (!isRecursion) {
+    if (!computed && !needRegisterProps) {
+      expression = filterPropsAsObject(expression);
+      if (t.isIdentifier(expression)) {
+        return expression;
+      }
+    }
+
+    if (checkMemberHasThis(expression)) {
+      const name = dynamicBinding.add({
+        expression,
+        isDirective,
+      });
+      return t.identifier(name);
+    }
   }
-  const { object, property } = expression;
-  let { computed } = expression;
+
+
   let objectReplaceNode = object;
   let propertyReplaceNode = property;
   if (!object.__transformed) {
@@ -587,7 +636,7 @@ function transformMemberExpression(expression, dynamicBinding, isDirective) {
       objectReplaceNode = transformIdentifier(
         object,
         dynamicBinding,
-        isDirective,
+        options,
       );
       objectReplaceNode.__transformed = true;
     }
@@ -595,7 +644,8 @@ function transformMemberExpression(expression, dynamicBinding, isDirective) {
       objectReplaceNode = transformMemberExpression(
         object,
         dynamicBinding,
-        isDirective,
+        options,
+        true,
       );
     }
   }
@@ -605,7 +655,8 @@ function transformMemberExpression(expression, dynamicBinding, isDirective) {
       propertyReplaceNode = transformMemberExpression(
         property,
         dynamicBinding,
-        isDirective,
+        options,
+        true,
       );
     }
     if (computed) { // others[index] => others[item.index]
@@ -621,7 +672,8 @@ function transformMemberExpression(expression, dynamicBinding, isDirective) {
           propertyReplaceNode = transformMemberExpression(
             property,
             dynamicBinding,
-            isDirective,
+            options,
+            true,
           );
           break;
         default:
@@ -670,26 +722,26 @@ function transformIdentifier(expression, dynamicBinding, isDirective) {
 /**
  * Transform ObjectExpression
  * */
-function transformObjectExpression(expression, dynamicBinding, isDirective) {
+function transformObjectExpression(expression, dynamicBinding, options) {
   const { properties } = expression;
   return properties.map(property => {
     const { key, value } = property;
     let replaceNode = value;
     if (t.isIdentifier(value)) {
-      replaceNode = transformIdentifier(value, dynamicBinding, isDirective);
+      replaceNode = transformIdentifier(value, dynamicBinding, options.isDirective);
     }
     if (t.isMemberExpression(value)) {
       replaceNode = transformMemberExpression(
         value,
         dynamicBinding,
-        isDirective,
+        options,
       );
     }
     if (t.isObjectExpression(value)) {
       replaceNode = transformObjectExpression(
         value,
         dynamicBinding,
-        isDirective,
+        options,
       );
     }
     return t.objectProperty(key, replaceNode);
@@ -735,6 +787,12 @@ function transformCallExpressionArg(ast, params, dynamicValue, isDirective) {
   return ast;
 }
 
+function filterPropsAsObject(expression) {
+  const code = genExpression(expression);
+  const result = code.replace(/^props\.|this\.props\./, '');
+  return parseExpression(result);
+}
+
 function checkMemberHasThis(expression) {
   const { object, property } = expression;
   let hasThisExpression = false;
@@ -764,17 +822,23 @@ function collectComponentDependentProps(path, attrValue, attrPath, componentDepe
     && attrValue.type
     && jsxEl.__tagId
   ) {
-    // Replace list render replaced node
-    traverse(attrPath, {
-      StringLiteral(innerPath) {
-        if (BINDING_REG.test(innerPath.node.value)) {
-          attrValue = innerPath.node.__originalExpression;
+    // renderClosureFunction should replace the node itself
+    if (attrValue.__renderClosureFunction) {
+      attrValue = attrValue.__renderClosureFunction;
+    } else {
+      // Replace list render replaced node
+      traverse(attrPath, {
+        StringLiteral(innerPath) {
+          if (BINDING_REG.test(innerPath.node.value)) {
+            attrValue = innerPath.node.__originalExpression;
+          }
         }
+      });
+      if (attrPath) {
+        attrValue = parseExpression('(' + attrPath.toString() + ')'); // deep clone
       }
-    });
-    if (attrPath) {
-      attrValue = parseExpression('(' + attrPath.toString() + ')'); // deep clone
     }
+
     componentDependentProps[jsxEl.__tagId].props =
       componentDependentProps[jsxEl.__tagId].props || {};
     componentDependentProps[jsxEl.__tagId].props[

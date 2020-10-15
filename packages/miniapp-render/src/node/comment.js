@@ -1,47 +1,15 @@
-import Pool from '../util/pool';
-import cache from '../util/cache';
-import tool from '../util/tool';
 import Node from './node';
 
-const pool = new Pool();
-
 class Comment extends Node {
-  static $$create(options, tree) {
-    const config = cache.getConfig();
-
-    if (config.optimization.commentMultiplexing) {
-      const instance = pool.get();
-
-      if (instance) {
-        instance.$$init(options, tree);
-        return instance;
-      }
-    }
-
-    return new Comment(options, tree);
-  }
-
-  $$init(options, tree) {
+  constructor(options) {
     options.type = 'comment';
-
-    super.$$init(options, tree);
+    super(options);
+    this.data = options.data;
   }
 
-  $$recycle() {
-    this.$$destroy();
-
-    const config = cache.getConfig();
-
-    if (config.optimization.commentMultiplexing) {
-      pool.add(this);
-    }
-  }
-
-  get $$domInfo() {
+  get _renderInfo() {
     return {
-      nodeId: this.$_nodeId,
-      pageId: this.$_pageId,
-      type: this.$_type,
+      nodeType: 'h-' + this.$_type,
     };
   }
 
@@ -54,8 +22,8 @@ class Comment extends Node {
   }
 
   cloneNode() {
-    return this.ownerDocument.$$createComment({
-      nodeId: `b-${tool.getId()}`,
+    return this.ownerDocument.createComment({
+      data: this.data
     });
   }
 }

@@ -71,10 +71,6 @@ function compareEventInWechat(last, now) {
 
 class EventTarget {
   constructor(...args) {
-    this.$$init(...args);
-  }
-
-  $$init() {
     // Supplement the instance's properties for the 'XXX' in XXX judgment
     this.ontouchstart = null;
     this.ontouchmove = null;
@@ -87,7 +83,7 @@ class EventTarget {
 
     // Logs the triggered miniapp events
     this.$_miniappEvent = null;
-    this.$_eventHandlerMap = null;
+    this.__eventHandlerMap = new Map();
   }
 
   // Destroy instance
@@ -101,16 +97,7 @@ class EventTarget {
     });
 
     this.$_miniappEvent = null;
-    this.$_eventHandlerMap = null;
-  }
-
-  set $_eventHandlerMap(value) {
-    this.$__eventHandlerMap = value;
-  }
-
-  get $_eventHandlerMap() {
-    if (!this.$__eventHandlerMap) this.$__eventHandlerMap = Object.create(null);
-    return this.$__eventHandlerMap;
+    this.__eventHandlerMap = null;
   }
 
   // Trigger event capture, bubble flow
@@ -128,14 +115,9 @@ class EventTarget {
     const path = [target];
     let parentNode = target.parentNode;
 
-    while (parentNode && parentNode.tagName !== 'HTML') {
+    while (parentNode && parentNode.ownerDocument) {
       path.push(parentNode);
       parentNode = parentNode.parentNode;
-    }
-
-    if (path[path.length - 1].tagName === 'BODY') {
-      // If the last node is document.body, the document.documentelement is appended
-      path.push(parentNode);
     }
 
     if (!event) {
@@ -143,6 +125,7 @@ class EventTarget {
       event = new Event({
         name: eventName,
         target,
+        detail: miniprogramEvent.detail,
         timeStamp: miniprogramEvent.timeStamp,
         touches: miniprogramEvent.touches,
         changedTouches: miniprogramEvent.changedTouches,
@@ -214,18 +197,23 @@ class EventTarget {
   }
 
   // Get handlers
-  $_getHandlers(eventName, isCapture, isInit) {
-    const handlerMap = this.$_eventHandlerMap;
-
+  __getHandles(eventName, isCapture, isInit) {
+    const pageId = this.__pageId || 'app';
+    if (!this.__eventHandlerMap.get(pageId)) {
+      this.__eventHandlerMap.set(pageId, new Map());
+    }
     if (isInit) {
-      const handlerObj = handlerMap[eventName] = handlerMap[eventName] || {};
+      let handlerObj = this.__eventHandlerMap.get(pageId).get(eventName);
+      if (!handlerObj) {
+        this.__eventHandlerMap.get(pageId).set(eventName, handlerObj = {});
+      }
 
       handlerObj.capture = handlerObj.capture || [];
       handlerObj.bubble = handlerObj.bubble || [];
 
       return isCapture ? handlerObj.capture : handlerObj.bubble;
     } else {
-      const handlerObj = handlerMap[eventName];
+      const handlerObj = this.__eventHandlerMap.get(pageId).get(eventName);
 
       if (!handlerObj) return null;
 
@@ -236,9 +224,16 @@ class EventTarget {
   // Trigger node event
   $$trigger(eventName, { event, args = [], isCapture, isTarget } = {}) {
     eventName = eventName.toLowerCase();
-    const handlers = this.$_getHandlers(eventName, isCapture);
-    const onEventName = `on${eventName}`;
+    const handlers = this.__getHandles(eventName, isCapture) || [];
 
+    if (eventName === 'onshareappmessage') {
+      if (process.env.NODE_ENV === 'development' && handlers.length > 1) {
+        console.warn('onShareAppMessage can only be listened with one callback function.');
+      }
+      return handlers[0] && handlers[0].call(this || null, event);
+    }
+
+    const onEventName = `on${eventName}`;
     if ((!isCapture || !isTarget) && typeof this[onEventName] === 'function') {
       // The event that triggers the onXXX binding
       if (event && event.$$immediateStop) return;
@@ -254,7 +249,8 @@ class EventTarget {
       handlers.forEach(handler => {
         if (event && event.$$immediateStop) return;
         try {
-          handler.call(this || null, event, ...args);
+          const processedArgs = event ? [event, ...args] : [...args];
+          handler.call(this || null, ...processedArgs);
         } catch (err) {
           console.error(err);
         }
@@ -262,10 +258,8 @@ class EventTarget {
     }
   }
 
-  /**
-     * 检查该事件是否可以触发
-     */
-  $$checkEvent(miniprogramEvent) {
+  // Check if the event can be triggered
+  __checkEvent(miniprogramEvent) {
     const last = this.$_miniappEvent;
     const now = miniprogramEvent;
 
@@ -286,7 +280,7 @@ class EventTarget {
     if (typeof eventName !== 'string') return;
 
     eventName = eventName.toLowerCase();
-    const handlers = this.$_getHandlers(eventName, isCapture);
+    const handlers = this.__getHandles(eventName, isCapture);
 
     if (handlers && handlers.length) handlers.length = 0;
   }
@@ -300,7 +294,7 @@ class EventTarget {
     else if (typeof options === 'object') isCapture = options.capture;
 
     eventName = eventName.toLowerCase();
-    const handlers = this.$_getHandlers(eventName, isCapture, true);
+    const handlers = this.__getHandles(eventName, isCapture, true);
 
     handlers.push(handler);
   }
@@ -309,7 +303,7 @@ class EventTarget {
     if (typeof eventName !== 'string' || typeof handler !== 'function') return;
 
     eventName = eventName.toLowerCase();
-    const handlers = this.$_getHandlers(eventName, isCapture);
+    const handlers = this.__getHandles(eventName, isCapture);
 
     if (handlers && handlers.length) handlers.splice(handlers.indexOf(handler), 1);
   }

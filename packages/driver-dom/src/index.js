@@ -40,9 +40,11 @@ const REMOVE_ATTRIBUTE = 'removeAttribute';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const TEXT_NODE = 3;
 const COMMENT_NODE = 8;
+const TEXT_SPLIT_COMMENT = '|';
 const EMPTY = '';
 const HYDRATION_INDEX = '__i';
 const HYDRATION_APPEND = '__a';
+const WITH_INNERHTML = '__h';
 const __DEV__ = process.env.NODE_ENV !== 'production';
 
 let tagNamePrefix = EMPTY;
@@ -192,11 +194,20 @@ export function updateText(node, text) {
 }
 
 function findHydrationChild(parent) {
+  const childNodes = parent.childNodes;
+
   if (parent[HYDRATION_INDEX] == null) {
     parent[HYDRATION_INDEX] = 0;
   }
 
-  return parent.childNodes[parent[HYDRATION_INDEX]++];
+  const child = childNodes[parent[HYDRATION_INDEX]++];
+
+  // If child is an comment node for spliting text node, use the next node.
+  if (child && child.nodeType === COMMENT_NODE && child.data === TEXT_SPLIT_COMMENT) {
+    return childNodes[parent[HYDRATION_INDEX]++];
+  } else {
+    return child;
+  }
 }
 
 /**
@@ -288,7 +299,7 @@ export function createElement(type, props, component, __shouldConvertUnitlessToR
       } else if (isEventProp(prop)) {
         addEventListener(node, prop.slice(2).toLowerCase(), value, component);
       } else {
-        setAttribute(node, prop, value);
+        setAttribute(node, prop, value, isSVGMode);
       }
     }
   }
@@ -358,15 +369,21 @@ export function removeAttribute(node, propKey) {
   node[REMOVE_ATTRIBUTE](propKey);
 }
 
-export function setAttribute(node, propKey, propValue) {
-  // For reduce innerHTML operation to improve performance.
-  if (propKey === DANGEROUSLY_SET_INNER_HTML && node[INNER_HTML] !== propValue[HTML]) {
-    return node[INNER_HTML] = propValue[HTML];
+export function setAttribute(node, propKey, propValue, isSvg) {
+  if (propKey === DANGEROUSLY_SET_INNER_HTML) {
+    // For reduce innerHTML operation to improve performance.
+    if (node[INNER_HTML] !== propValue[HTML]) {
+      node[INNER_HTML] = propValue[HTML];
+    }
+
+    node[WITH_INNERHTML] = true;
+    return;
   }
 
   if (propKey === CLASS_NAME) propKey = CLASS;
 
-  if (propKey in node) {
+  // Prop for svg can only be set by attribute
+  if (!isSvg && propKey in node) {
     try {
       // Some node property is readonly when in strict mode
       node[propKey] = propValue;
@@ -418,6 +435,11 @@ export function beforeRender({ hydrate }) {
 }
 
 function recolectHydrationChild(hydrationParent) {
+  // Should not to compare node with dangerouslySetInnerHTML because vdomLength is alway 0
+  if (hydrationParent[WITH_INNERHTML]) {
+    return;
+  }
+
   const nativeLength = hydrationParent.childNodes.length;
   const vdomLength = hydrationParent[HYDRATION_INDEX] || 0;
   if (nativeLength - vdomLength > 0) {

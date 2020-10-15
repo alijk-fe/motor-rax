@@ -1,5 +1,5 @@
 // eslint-disable-next-line import/no-extraneous-dependencies
-import { isMiniApp, isWeChatMiniProgram, isQuickApp } from 'universal-env';
+import { isMiniApp, isWeChatMiniProgram, isQuickApp, isByteDanceMicroApp } from 'universal-env';
 
 export default function() {
   // For alibaba miniapp
@@ -10,15 +10,17 @@ export default function() {
     };
   }
 
-  // For wechat miniprogram
-  if (isWeChatMiniProgram) {
+  // For wechat miniprogram and bytedance microapp
+  if (isWeChatMiniProgram || isByteDanceMicroApp) {
     return {
       properties: {
         __tagId: null,
-        ref: null
+        ref: null,
+        // For native project
+        outerProps: null
       },
       options: {
-        addGlobalClass: true,
+        styleIsolation: 'shared',
         multipleSlots: true
       }
     };

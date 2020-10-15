@@ -2,7 +2,6 @@ const t = require('@babel/types');
 const traverse = require('../utils/traverseNodePath');
 const genExpression = require('../codegen/genExpression');
 const CodeError = require('../utils/CodeError');
-const getCompiledComponents = require('../getCompiledComponents');
 const DynamicBinding = require('../utils/DynamicBinding');
 const handleRefAttr = require('../utils/handleRefAttr');
 const isNativeComponent = require('../utils/isNativeComponent');
@@ -13,6 +12,7 @@ function transformAttribute(ast, code, adapter) {
   traverse(ast, {
     JSXAttribute(path) {
       const { node } = path;
+      const { node: componentTagNode } = path.parentPath.get('name');
       const attrName = node.name.name;
       switch (attrName) {
         case 'key':
@@ -30,20 +30,20 @@ function transformAttribute(ast, code, adapter) {
           break;
         case 'className':
           if (!adapter.styleKeyword) {
-            if (isNativeComponent(path, adapter.platform)) {
+            if (isNativeComponent(componentTagNode, adapter.platform)) {
               node.name.name = 'class';
             } else {
               // Object.assign for shallow copy, avoid self tag is same reference
               path.parentPath.node.attributes.push(t.jsxAttribute(t.jsxIdentifier('class'),
                 Object.assign({}, node.value)));
             }
-          } else if (isNativeComponent(path, adapter.platform)) {
+          } else if (isNativeComponent(componentTagNode, adapter.platform)) {
             node.name.name = 'class';
           }
           break;
         case 'id':
           if (adapter.styleKeyword) {
-            if (!isNativeComponent(path, adapter.platform)) {
+            if (!isNativeComponent(componentTagNode, adapter.platform)) {
               // Object.assign for shallow copy, avoid self tag is same reference
               path.parentPath.node.attributes.push(t.jsxAttribute(t.jsxIdentifier('componentId'),
                 Object.assign({}, node.value)));
@@ -51,7 +51,7 @@ function transformAttribute(ast, code, adapter) {
           }
           break;
         case 'style':
-          if (adapter.styleKeyword && !isNativeComponent(path, adapter.platform)) {
+          if (adapter.styleKeyword && !isNativeComponent(componentTagNode, adapter.platform)) {
             node.name.name = 'styleSheet';
           }
           break;

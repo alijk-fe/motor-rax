@@ -1,6 +1,6 @@
 {
   "name": "miniapp-render",
-  "version": "0.1.15",
+  "version": "1.2.4",
   "description": "DOM simulator for MiniApp",
   "files": [
     "dist"
@@ -31,9 +31,7 @@
     "type": "git",
     "url": "https://github.com/alibaba/rax.git"
   },
-  "author": {
-    "name": "rax"
-  },
+  "author": "Rax Team",
   "license": "MIT",
   "devDependencies": {
     "@babel/core": "^7.4.5",
@@ -54,6 +52,7 @@
     "rollup-plugin-filesize": "^6.1.0",
     "rollup-plugin-node-resolve": "^5.2.0",
     "rollup-plugin-replace": "^2.2.0",
+    "rollup-plugin-terser": "^5.3.0",
     "universal-env": "^3.2.0"
   }
 }
